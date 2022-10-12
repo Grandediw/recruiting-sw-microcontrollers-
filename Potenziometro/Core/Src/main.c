@@ -72,15 +72,14 @@ int main(void)
 {
   /* USER CODE BEGIN 1 */
 		uint16_t AD_RES = 0;
-			uint16_t lampeggio = 0;
-			uint8_t MSG1[] = "Warning!: Undervoltage\r\n";
-				uint8_t MSG2[] = "Warning!: Overvoltage\r\n";
-				uint8_t MSG3[] = "Voltage:\r\n";
-				uint8_t MSG4[] = "Board in waiting state - please press the emergency button\r\n";
-				 char msg[10];
-				 uint16_t led_time = 0;
-				 	uint16_t delay_sensor = 1999;
-				 	uint16_t delay_voltage = 3499;
+		uint8_t MSG1[] = "Warning!: Undervoltage\r\n";
+		uint8_t MSG2[] = "Warning!: Overvoltage\r\n";
+		uint8_t MSG3[] = "Voltage:\r\n";
+		uint8_t MSG4[] = "Board in waiting state - please press the emergency button\r\n";
+		char msg[10];
+		uint16_t led_time = 0;
+		uint16_t delay_sensor = 1999;
+		uint16_t delay_voltage = 3499;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -119,17 +118,19 @@ int main(void)
 	 	     // Read The ADC Conversion Result
 	 	      AD_RES = HAL_ADC_GetValue(&hadc1);
 	 	     led_time = __HAL_TIM_GET_COUNTER(&htim16);
-	 	     // Running state
+	 	    // Waiting state
 	 	    if(interrupt%2!=(uint16_t)0)
 	 	     	      {
+	 	    	        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_RESET);
+	 	    		    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_RESET);
 	 	     	        HAL_UART_Transmit(&hlpuart1, MSG4, sizeof(MSG4), 1000);
 	 	     	        HAL_Delay(500);
 	 	     	      }
-	 	    // Waiting state
+	 	   // Running state
 	 	     if(interrupt%2==(uint16_t)0){
 	 	    // Check voltage every 350ms
 	 	     if(led_time%delay_voltage==(uint16_t)0){
-	 	       if(AD_RES<=2234){
+	 	     if(AD_RES<=2234){
 	 		      // Undervoltage
 	 	    	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
 	 	    	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_RESET);
@@ -141,7 +142,7 @@ int main(void)
 	 	    	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_SET);
 	 	    	  HAL_UART_Transmit(&hlpuart1, MSG2, sizeof(MSG2), 100);
 	 	      }
-	 	       else if(AD_RES<3351 && AD_RES>2234){
+	 	      else if(AD_RES<3351 && AD_RES>2234){
 	 	    	   // Volatge OK
 	 	    	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_RESET);
 	 	    	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_5, GPIO_PIN_RESET);
@@ -399,8 +400,6 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-	//Questa funzione è comune a tutti gli interrupt EXTI
-	//Per prima cosa vediamo se è stato il nostro pin a generarlo
 	if(GPIO_Pin == B1_Pin)
 	{
 	 // Counter of User button
