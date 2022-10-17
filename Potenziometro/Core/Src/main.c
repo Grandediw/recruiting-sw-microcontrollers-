@@ -51,6 +51,12 @@ TIM_HandleTypeDef htim17;
 
 /* USER CODE BEGIN PV */
 uint16_t interrupt = 2;
+uint16_t sensorCount = 2;
+uint16_t voltageCount = 2;
+enum VoltageState {
+	UNKNOWN, OVERVOLTAGE, UNDERVOLTAGE, SAFESTATE,
+};
+enum VoltageState currState = UNKNOWN;
 
 /* USER CODE END PV */
 
@@ -63,6 +69,11 @@ static void MX_TIM16_Init(void);
 static void MX_ADC2_Init(void);
 static void MX_TIM17_Init(void);
 /* USER CODE BEGIN PFP */
+void sensor();
+void unknown();
+void safestate();
+void undervoltage();
+void overvoltage();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -112,9 +123,11 @@ int main(void) {
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
 	while (1) {
+
 		/* USER CODE END WHILE */
 
 		/* USER CODE BEGIN 3 */
+
 		// Waiting state
 		if (interrupt % 2 != (uint16_t) 0) {
 			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_RESET);
@@ -122,6 +135,22 @@ int main(void) {
 			HAL_UART_Transmit(&hlpuart1, MSG4, sizeof(MSG4), 1000);
 			HAL_Delay(500);
 		}
+		// Running state
+		switch (currState) {
+		case UNKNOWN:
+			unknown();
+			break;
+		case SAFESTATE:
+			safestate();
+			break;
+		case UNDERVOLTAGE:
+			undervoltage();
+			break;
+		case OVERVOLTAGE:
+			overvoltage();
+			break;
+		}
+		sensor();
 	}
 }
 /* USER CODE END 3 */
@@ -446,36 +475,35 @@ uint8_t MSG3[] = "Warning!: Sensor value out of range \r\n";
 char msg[50];
 char msg2[50];
 uint16_t led_time = 0;
-enum VoltageState {
-	UNKNOWN, OVERVOLTAGE, UNDERVOLTAGE, SAFESTATE,
-};
-enum VoltageState currState = UNKNOWN;
 void unknown() {
-	HAL_ADC_Start(&hadc1);
-	// Poll ADC1 Perihperal
-	HAL_ADC_PollForConversion(&hadc1, 200);
-	// Read The ADC potentiometer value
-	uint16_t rawVoltage = HAL_ADC_GetValue(&hadc1);
-	float valueVoltage = (rawVoltage * 3.3) / 4096;
-	sprintf(msg2, "(%lu) System Voltage: %f\r\n", HAL_GetTick() / 10, valueVoltage);
-	HAL_UART_Transmit(&hlpuart1, (uint8_t*) msg2, strlen(msg2), 1000);
+	// Check voltage every 350ms
+	if (voltageCount % 2 != (uint16_t) 0) {
+		voltageCount++;
+		HAL_ADC_Start(&hadc1);
+		// Poll ADC1 Perihperal
+		HAL_ADC_PollForConversion(&hadc1, 200);
+		// Read The ADC potentiometer value
+		uint16_t rawVoltage = HAL_ADC_GetValue(&hadc1);
+		float valueVoltage = (rawVoltage * 3.3) / 4096;
+		sprintf(msg2, "(%lu) System Voltage: %f\r\n", HAL_GetTick() / 10,
+				valueVoltage);
+		HAL_UART_Transmit(&hlpuart1, (uint8_t*) msg2, strlen(msg2), 1000);
 
-	if (valueVoltage < 2.7 && valueVoltage > 1.8) {
+		if (valueVoltage < 2.7 && valueVoltage > 1.8) {
 
-		currState = SAFESTATE;
+			currState = SAFESTATE;
 
+		}
+		if (valueVoltage <= 1.8) {
+			HAL_UART_Transmit(&hlpuart1, MSG1, sizeof(MSG1), 1000);
+			currState = UNDERVOLTAGE;
+
+		}
+		if (valueVoltage >= 2.7) {
+			HAL_UART_Transmit(&hlpuart1, MSG2, sizeof(MSG2), 1000);
+			currState = OVERVOLTAGE;
+		}
 	}
-	if (valueVoltage <= 1.8) {
-		HAL_UART_Transmit(&hlpuart1, MSG1, sizeof(MSG1), 1000);
-		currState = UNDERVOLTAGE;
-
-	}
-	if (valueVoltage >= 2.7) {
-		HAL_UART_Transmit(&hlpuart1, MSG2, sizeof(MSG2), 1000);
-		currState = OVERVOLTAGE;
-
-	}
-
 }
 void safestate() {
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_RESET);
@@ -493,19 +521,24 @@ void overvoltage() {
 	currState = UNKNOWN;
 }
 void sensor() {
-	HAL_ADC_Start(&hadc2);
-	// Poll ADC2 Sensor
-	HAL_ADC_PollForConversion(&hadc2, 200);
-	// Read The ADC sensor value
-	uint16_t rawSensor = HAL_ADC_GetValue(&hadc2);
-	float valueSensor = (rawSensor * 3.3) / 4096;
-	float Magneticvalue = (valueSensor - (3.3 / 2));
-	Magneticvalue = (Magneticvalue * 1000) / 1.5;
-	if (Magneticvalue > -1000 && Magneticvalue < 1000) {
-		sprintf(msg, "(%lu) Magnetic field: %f\r\n", HAL_GetTick() / 10, Magneticvalue);
-		HAL_UART_Transmit(&hlpuart1, (uint8_t*) msg, strlen(msg), 1000);
-	} else
-		HAL_UART_Transmit(&hlpuart1, MSG3, sizeof(MSG3), 1000);
+	// Check sensor every 200ms
+	if (sensorCount % 2 != (uint16_t) 0) {
+		sensorCount++;
+		HAL_ADC_Start(&hadc2);
+		// Poll ADC2 Sensor
+		HAL_ADC_PollForConversion(&hadc2, 200);
+		// Read The ADC sensor value
+		uint16_t rawSensor = HAL_ADC_GetValue(&hadc2);
+		float valueSensor = (rawSensor * 3.3) / 4096.0;
+		float Magneticvalue = (valueSensor - (3.3 / 2.0));
+		Magneticvalue = (Magneticvalue * 1000) / 1.6;
+		if (Magneticvalue > -1000 && Magneticvalue < 1000) {
+			sprintf(msg, "(%lu) Magnetic field: %f\r\n", HAL_GetTick() / 10,
+					Magneticvalue);
+			HAL_UART_Transmit(&hlpuart1, (uint8_t*) msg, strlen(msg), 1000);
+		} else
+			HAL_UART_Transmit(&hlpuart1, MSG3, sizeof(MSG3), 1000);
+	}
 }
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	if (GPIO_Pin == B1_Pin) {
@@ -517,24 +550,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 	if (interrupt % 2 == (uint16_t) 0) {
 		if (htim == &htim17) {
 			// Check sensor every 200ms
-			sensor();
+			sensorCount++;
 		}
 		if (htim == &htim16) {
 			// Check voltage every 350ms
-			switch (currState) {
-			case UNKNOWN:
-				unknown();
-				break;
-			case SAFESTATE:
-				safestate();
-				break;
-			case UNDERVOLTAGE:
-				undervoltage();
-				break;
-			case OVERVOLTAGE:
-				overvoltage();
-				break;
-			}
+			voltageCount++;
 		}
 	}
 }
